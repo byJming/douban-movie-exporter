@@ -152,7 +152,15 @@
     function getProfileSlug() {
         const match = location.pathname.match(/^\/people\/([^/]+)/);
         if (match) return match[1];
-        return window._GLOBAL_NAV && window._GLOBAL_NAV.USER_ID ? String(window._GLOBAL_NAV.USER_ID) : '';
+        const userId = window._GLOBAL_NAV && window._GLOBAL_NAV.USER_ID;
+        if (userId) return String(userId);
+        const profileLink = [...document.querySelectorAll('a[href]')].find(link => {
+            const label = textOf(link);
+            return ['我的主页', '个人主页', '豆瓣主页'].includes(label)
+                && /https?:\/\/www\.douban\.com\/people\/[^/?#]+\/?(?:[?#]|$)/.test(link.href);
+        });
+        const profileMatch = profileLink && profileLink.href.match(/\/people\/([^/?#]+)/);
+        return profileMatch ? profileMatch[1] : '';
     }
 
     function detectContext() {
@@ -388,7 +396,7 @@
         if (category === 'movie') return slug ? `https://movie.douban.com/people/${slug}/collect?mode=grid` : 'https://movie.douban.com/mine?status=collect&mode=grid';
         if (category === 'book') return slug ? `https://book.douban.com/people/${slug}/collect?mode=grid` : 'https://book.douban.com/mine?status=collect&mode=grid';
         if (category === 'music') return slug ? `https://music.douban.com/people/${slug}/collect?mode=grid` : 'https://music.douban.com/mine?status=collect&mode=grid';
-        return slug ? `https://www.douban.com/people/${slug}/games?action=collect` : 'https://www.douban.com/mine/';
+        return slug ? `https://www.douban.com/people/${slug}/games?action=collect` : '';
     }
 
     function getCategoryStatusLabel(category) {
@@ -400,12 +408,41 @@
         if (category === 'game') {
             return slug
                 ? `https://www.douban.com/people/${slug}/games?action=${status}`
-                : 'https://www.douban.com/mine/';
+                : '';
         }
         const host = category === 'book' ? 'book' : category === 'music' ? 'music' : 'movie';
         return slug
             ? `https://${host}.douban.com/people/${slug}/${status}?mode=grid`
             : `https://${host}.douban.com/mine?status=${status}&mode=grid`;
+    }
+
+    function getGameStatusBridgeUrl(status) {
+        const bridge = new URL('https://www.douban.com/mine/');
+        bridge.hash = new URLSearchParams({
+            db_export: '1',
+            db_export_category: 'game',
+            db_export_status: status
+        }).toString();
+        return bridge.href;
+    }
+
+    function getPendingExportRequest() {
+        if (!location.hash) return null;
+        const hashValue = location.hash.slice(1).split('?')[0];
+        const params = new URLSearchParams(hashValue);
+        const category = params.get('db_export_category');
+        const status = params.get('db_export_status');
+        if (params.get('db_export') !== '1' || category !== 'game' || !STATUS_ORDER.includes(status)) return null;
+        return { category, status };
+    }
+
+    function redirectPendingExport(context) {
+        const pending = getPendingExportRequest();
+        if (!pending || context !== 'profile') return false;
+        const target = getCategoryStatusUrl(pending.category, getProfileSlug(), pending.status);
+        if (!target) return false;
+        window.location.replace(withAutoExport(target));
+        return true;
     }
 
     function getCategoryStatusFilePart() {
@@ -414,6 +451,7 @@
     }
 
     function withAutoExport(url) {
+        if (!url) return '';
         const next = new URL(url, location.href);
         next.searchParams.set('db_export', '1');
         return next.href;
@@ -492,7 +530,16 @@
         overlay.querySelectorAll('button[data-status]').forEach(button => {
             button.onclick = () => {
                 overlay.remove();
-                window.open(withAutoExport(getCategoryStatusUrl(category, slug, button.dataset.status)), '_blank', 'noopener');
+                const target = getCategoryStatusUrl(category, slug, button.dataset.status);
+                if (!target) {
+                    if (category === 'game') {
+                        window.open(getGameStatusBridgeUrl(button.dataset.status), '_blank', 'noopener');
+                    } else {
+                        alert('无法识别当前登录用户，请先打开个人主页后再导出。');
+                    }
+                    return;
+                }
+                window.open(withAutoExport(target), '_blank', 'noopener');
             };
         });
     }
@@ -1012,6 +1059,7 @@
         const context = detectContext();
         if (!context) return;
         if (context === 'profile') {
+            if (redirectPendingExport(context)) return;
             renderSummaryButton(context);
             return;
         }
