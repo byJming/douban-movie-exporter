@@ -3,7 +3,7 @@
 // @name:en      Douban Media Export Tool
 // @name:zh-CN   豆瓣书影音游戏数据导出工具
 // @namespace    https://github.com/byJming/douban-movie-exporter
-// @version      2.3.0
+// @version      2.4.0
 // @description  导出豆瓣电影、读书、音乐和游戏收藏，支持 Excel/JSON、封面资源 ZIP，并在豆瓣页面提供汇总导航。
 // @description:en Export Douban movies, books, music and games to Excel/JSON with cover ZIP support and a compact summary navigator.
 // @author       ming

@@ -1,6 +1,6 @@
 # 豆瓣书影音游戏数据导出工具
 
-![License](https://img.shields.io/badge/license-MIT-green) ![Version](https://img.shields.io/badge/version-2.3.0-blue) ![JavaScript](https://img.shields.io/badge/JavaScript-ES6+-yellow)
+![License](https://img.shields.io/badge/license-MIT-green) ![Version](https://img.shields.io/badge/version-2.4.0-blue) ![JavaScript](https://img.shields.io/badge/JavaScript-ES6+-yellow)
 
 一个用于备份豆瓣电影、读书、音乐和游戏收藏的油猴（Tampermonkey）脚本，支持 JSON、Excel，以及可选的封面资源包。
 
@@ -26,7 +26,7 @@
 
 1. 安装 [Tampermonkey](https://www.tampermonkey.net/) 或其他兼容的用户脚本管理器。
 2. 打开[脚本安装地址](https://github.com/byJming/douban-movie-exporter/raw/main/douban-movie-exporter.user.js)。
-3. 确认安装或更新，并检查脚本版本为 `2.3.0`。
+3. 确认安装或更新，并检查脚本版本为 `2.4.0`。
 
 ## 使用
 
