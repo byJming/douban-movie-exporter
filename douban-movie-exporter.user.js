@@ -12,10 +12,16 @@
 // @match        https://www.douban.com/people/*
 // @match        https://movie.douban.com/mine*
 // @match        https://movie.douban.com/people/*/collect*
+// @match        https://movie.douban.com/people/*/wish*
+// @match        https://movie.douban.com/people/*/do*
 // @match        https://book.douban.com/mine*
 // @match        https://book.douban.com/people/*/collect*
+// @match        https://book.douban.com/people/*/wish*
+// @match        https://book.douban.com/people/*/do*
 // @match        https://music.douban.com/mine*
 // @match        https://music.douban.com/people/*/collect*
+// @match        https://music.douban.com/people/*/wish*
+// @match        https://music.douban.com/people/*/do*
 // @match        https://www.douban.com/people/*/games*
 // @require      https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js
 // @grant        GM_addStyle
@@ -54,6 +60,14 @@
         music: { label: '音乐', icon: '🎵', sheet: '音乐收藏', file: 'Music', pageSize: 15 },
         game: { label: '游戏', icon: '🎮', sheet: '游戏收藏', file: 'Game', pageSize: 15 }
     };
+
+    const STATUS_LABELS = {
+        movie: { wish: '想看', do: '在看', collect: '看过' },
+        book: { wish: '想读', do: '在读', collect: '读过' },
+        music: { wish: '想听', do: '在听', collect: '听过' },
+        game: { wish: '想玩', do: '在玩', collect: '玩过' }
+    };
+    const STATUS_ORDER = ['wish', 'do', 'collect'];
 
     const FIELDS = [
         { key: 'title', name: '标题', default: true },
@@ -138,15 +152,23 @@
     function getProfileSlug() {
         const match = location.pathname.match(/^\/people\/([^/]+)/);
         if (match) return match[1];
-        return window._GLOBAL_NAV && window._GLOBAL_NAV.USER_ID ? String(window._GLOBAL_NAV.USER_ID) : '';
+        const userId = window._GLOBAL_NAV && window._GLOBAL_NAV.USER_ID;
+        if (userId) return String(userId);
+        const profileLink = [...document.querySelectorAll('a[href]')].find(link => {
+            const label = textOf(link);
+            return ['我的主页', '个人主页', '豆瓣主页'].includes(label)
+                && /https?:\/\/www\.douban\.com\/people\/[^/?#]+\/?(?:[?#]|$)/.test(link.href);
+        });
+        const profileMatch = profileLink && profileLink.href.match(/\/people\/([^/?#]+)/);
+        return profileMatch ? profileMatch[1] : '';
     }
 
     function detectContext() {
         const host = location.hostname;
         const path = location.pathname;
-        if (host === 'movie.douban.com' && (/\/mine/.test(path) || /\/people\/[^/]+\/collect/.test(path))) return 'movie';
-        if (host === 'book.douban.com' && (/\/mine/.test(path) || /\/people\/[^/]+\/collect/.test(path))) return 'book';
-        if (host === 'music.douban.com' && (/\/mine/.test(path) || /\/people\/[^/]+\/collect/.test(path))) return 'music';
+        if (host === 'movie.douban.com' && (/\/mine/.test(path) || /\/people\/[^/]+\/(?:collect|wish|do)/.test(path))) return 'movie';
+        if (host === 'book.douban.com' && (/\/mine/.test(path) || /\/people\/[^/]+\/(?:collect|wish|do)/.test(path))) return 'book';
+        if (host === 'music.douban.com' && (/\/mine/.test(path) || /\/people\/[^/]+\/(?:collect|wish|do)/.test(path))) return 'music';
         if (host === 'www.douban.com' && /\/people\/[^/]+\/games/.test(path)) return 'game';
         if (host === 'www.douban.com' && /^\/people\/[^/]+\/?$/.test(path)) return 'profile';
         if ((host === 'douban.com' || host.endsWith('.douban.com')) && host !== 'accounts.douban.com') return 'generic';
@@ -218,6 +240,14 @@
         return match ? match[1] : '';
     }
 
+    function getStatusFromUrl() {
+        const url = new URL(location.href);
+        const param = url.searchParams.get('status') || url.searchParams.get('action');
+        if (param) return param;
+        const match = url.pathname.match(/\/(collect|wish|do)\/?$/);
+        return match ? match[1] : 'collect';
+    }
+
     function baseRecord(category, link, item) {
         return {
             category,
@@ -225,7 +255,7 @@
             title: '',
             rating: '',
             date: '',
-            status: new URL(location.href).searchParams.get('status') || new URL(location.href).searchParams.get('action') || 'collect',
+            status: getStatusFromUrl(),
             tags: '',
             comment: '',
             intro: '',
@@ -366,10 +396,62 @@
         if (category === 'movie') return slug ? `https://movie.douban.com/people/${slug}/collect?mode=grid` : 'https://movie.douban.com/mine?status=collect&mode=grid';
         if (category === 'book') return slug ? `https://book.douban.com/people/${slug}/collect?mode=grid` : 'https://book.douban.com/mine?status=collect&mode=grid';
         if (category === 'music') return slug ? `https://music.douban.com/people/${slug}/collect?mode=grid` : 'https://music.douban.com/mine?status=collect&mode=grid';
-        return slug ? `https://www.douban.com/people/${slug}/games?action=collect` : 'https://www.douban.com/mine/';
+        return slug ? `https://www.douban.com/people/${slug}/games?action=collect` : '';
+    }
+
+    function getCategoryStatusLabel(category) {
+        const labels = STATUS_LABELS[category] || STATUS_LABELS.movie;
+        return labels[getStatusFromUrl()] || labels.collect;
+    }
+
+    function getCategoryStatusUrl(category, slug, status) {
+        if (category === 'game') {
+            return slug
+                ? `https://www.douban.com/people/${slug}/games?action=${status}`
+                : '';
+        }
+        const host = category === 'book' ? 'book' : category === 'music' ? 'music' : 'movie';
+        return slug
+            ? `https://${host}.douban.com/people/${slug}/${status}?mode=grid`
+            : `https://${host}.douban.com/mine?status=${status}&mode=grid`;
+    }
+
+    function getGameStatusBridgeUrl(status) {
+        const bridge = new URL('https://www.douban.com/mine/');
+        bridge.hash = new URLSearchParams({
+            db_export: '1',
+            db_export_category: 'game',
+            db_export_status: status
+        }).toString();
+        return bridge.href;
+    }
+
+    function getPendingExportRequest() {
+        if (!location.hash) return null;
+        const hashValue = location.hash.slice(1).split('?')[0];
+        const params = new URLSearchParams(hashValue);
+        const category = params.get('db_export_category');
+        const status = params.get('db_export_status');
+        if (params.get('db_export') !== '1' || category !== 'game' || !STATUS_ORDER.includes(status)) return null;
+        return { category, status };
+    }
+
+    function redirectPendingExport(context) {
+        const pending = getPendingExportRequest();
+        if (!pending || context !== 'profile') return false;
+        const target = getCategoryStatusUrl(pending.category, getProfileSlug(), pending.status);
+        if (!target) return false;
+        window.location.replace(withAutoExport(target));
+        return true;
+    }
+
+    function getCategoryStatusFilePart() {
+        const parts = { collect: 'Collect', wish: 'Wish', do: 'Do' };
+        return parts[getStatusFromUrl()] || 'Collect';
     }
 
     function withAutoExport(url) {
+        if (!url) return '';
         const next = new URL(url, location.href);
         next.searchParams.set('db_export', '1');
         return next.href;
@@ -416,7 +498,7 @@
             <p class="db-summary-help">从这里选择分类。当前收藏页直接打开字段选择，其他分类会在新标签页打开并自动进入导出流程。个人主页的栏目顺序沿用豆瓣原生页面顺序。</p>
             <div class="db-summary-list">${entries.map(entry => `<div class="db-summary-card">
                 ${entry.cover ? `<img class="db-summary-cover" src="${escapeHtml(entry.cover)}" alt="${escapeHtml(entry.label)}封面">` : '<div class="db-summary-cover"></div>'}
-                <div class="db-summary-main"><div class="db-summary-title">${escapeHtml(entry.icon)} ${escapeHtml(entry.label)}</div><div class="db-summary-meta">${escapeHtml(entry.summary)}</div><button class="db-summary-action" data-current="${entry.current ? '1' : '0'}" data-url="${escapeHtml(entry.url)}">${entry.current ? '导出当前分类' : '去导出'}</button></div>
+                <div class="db-summary-main"><div class="db-summary-title">${escapeHtml(entry.icon)} ${escapeHtml(entry.label)}</div><div class="db-summary-meta">${escapeHtml(entry.summary)}</div><button class="db-summary-action" data-current="${entry.current ? '1' : '0'}" data-category="${escapeHtml(entry.category)}" data-url="${escapeHtml(entry.url)}">${entry.current ? '导出当前分类' : '去导出'}</button></div>
             </div>`).join('')}</div>
             <div class="db-btn-group"><button class="db-btn db-btn-secondary" id="db-close-summary">关闭</button></div>
         </div>`;
@@ -424,8 +506,41 @@
         overlay.addEventListener('click', event => {
             if (event.target === overlay || event.target.id === 'db-close-summary') { overlay.remove(); return; }
             const action = event.target.closest('.db-summary-action');
-            if (action && action.dataset.current === '1') { overlay.remove(); showConfigPanel(); }
-            else if (action) window.open(action.dataset.url, '_blank', 'noopener');
+            if (!action) return;
+            if (action.dataset.current === '1') { overlay.remove(); showConfigPanel(); return; }
+            overlay.remove();
+            showStatusChooser(action.dataset.category);
+        });
+    }
+
+    function showStatusChooser(category) {
+        if (document.getElementById('db-export-modal-overlay')) return;
+        const slug = getProfileSlug();
+        const labels = STATUS_LABELS[category];
+        const overlay = document.createElement('div');
+        overlay.id = 'db-export-modal-overlay';
+        overlay.innerHTML = `<div id="db-export-modal">
+            <h3>${CATEGORIES[category].icon} 选择要导出的${CATEGORIES[category].label}收藏</h3>
+            <p class="db-note">请选择要导出的收藏状态，将在新标签页打开对应收藏页并自动进入导出流程。</p>
+            <div class="db-download-actions">${STATUS_ORDER.map(status => `<button class="db-btn db-btn-primary" data-status="${status}" style="text-align:left">${labels[status]}</button>`).join('')}</div>
+            <div class="db-btn-group"><button class="db-btn db-btn-secondary" id="db-status-cancel">取消</button></div>
+        </div>`;
+        document.body.appendChild(overlay);
+        overlay.querySelector('#db-status-cancel').onclick = () => overlay.remove();
+        overlay.querySelectorAll('button[data-status]').forEach(button => {
+            button.onclick = () => {
+                overlay.remove();
+                const target = getCategoryStatusUrl(category, slug, button.dataset.status);
+                if (!target) {
+                    if (category === 'game') {
+                        window.open(getGameStatusBridgeUrl(button.dataset.status), '_blank', 'noopener');
+                    } else {
+                        alert('无法识别当前登录用户，请先打开个人主页后再导出。');
+                    }
+                    return;
+                }
+                window.open(withAutoExport(target), '_blank', 'noopener');
+            };
         });
     }
 
@@ -687,7 +802,8 @@
         } finally {
             clearInterval(progressTimer);
         }
-        triggerDownload(blob, `Douban_${CATEGORIES[category].file}_Covers_${new Date().toISOString().slice(0, 10)}.zip`);
+        const statusPart = getCategoryStatusFilePart();
+        triggerDownload(blob, `Douban_${CATEGORIES[category].file}${statusPart ? `_${statusPart}` : ''}_Covers_${new Date().toISOString().slice(0, 10)}.zip`);
         if (statusEl) statusEl.textContent = `封面 ZIP 已生成：${formatBytes(blob.size)}；成功 ${records.length - failures.length}，失败 ${failures.length}`;
         if (button) { button.disabled = false; button.textContent = '🖼️ 重新下载封面 ZIP'; }
     }
@@ -707,7 +823,7 @@
         const overlay = document.createElement('div');
         overlay.id = 'db-export-modal-overlay';
         overlay.innerHTML = `<div id="db-export-modal">
-            <h3>${CATEGORIES[category].icon} 导出${CATEGORIES[category].label}</h3>
+            <h3>${CATEGORIES[category].icon} 导出${CATEGORIES[category].label}（${getCategoryStatusLabel(category)}）</h3>
             <p class="db-note">选择数据字段；封面资源单独打包，JSON/Excel 只记录本地文件路径，不保存豆瓣图片原始地址。</p>
             <div class="db-checkbox-group">${FIELDS.map(field => `<label class="db-checkbox-label"><input class="db-field-checkbox" type="checkbox" value="${field.key}" ${selected.includes(field.key) ? 'checked' : ''}>${field.name}</label>`).join('')}</div>
             <label class="db-checkbox-label" style="padding:10px;border:1px solid #e8e8e8;border-radius:7px"><input id="db-include-covers" type="checkbox" ${includeCovers ? 'checked' : ''}><span><b>同时导出海报/封面资源</b><br><small style="color:#888">完成后下载独立 ZIP；会增加网络流量、浏览器内存与磁盘占用</small></span></label>
@@ -848,7 +964,8 @@
     }
 
     function getExportBaseName(category) {
-        return `Douban_${CATEGORIES[category].file}_Export_${new Date().toISOString().slice(0, 10)}`;
+        const statusPart = getCategoryStatusFilePart();
+        return `Douban_${CATEGORIES[category].file}${statusPart ? `_${statusPart}` : ''}_Export_${new Date().toISOString().slice(0, 10)}`;
     }
 
     function buildJsonOutput(category) {
@@ -859,7 +976,7 @@
         return {
             meta: {
                 category,
-                category_name: CATEGORIES[category].label,
+                category_name: `${CATEGORIES[category].label}（${getCategoryStatusLabel(category)}）`,
                 export_date: new Date().toISOString(),
                 total_count: data.length,
                 page_range: state.pageRange || null,
@@ -891,7 +1008,7 @@
         const ws = XLSX.utils.aoa_to_sheet(sheet);
         ws['!cols'] = exportFields.map(field => ({ wch: field === 'title' ? 42 : field === 'comment' || field === 'intro' ? 52 : field === 'link' ? 64 : field === 'cover_file' ? 36 : 16 }));
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, CATEGORIES[category].sheet);
+        XLSX.utils.book_append_sheet(wb, ws, `${CATEGORIES[category].sheet}（${getCategoryStatusLabel(category)}）`);
         return wb;
     }
 
@@ -942,6 +1059,7 @@
         const context = detectContext();
         if (!context) return;
         if (context === 'profile') {
+            if (redirectPendingExport(context)) return;
             renderSummaryButton(context);
             return;
         }
