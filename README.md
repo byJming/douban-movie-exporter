@@ -28,6 +28,22 @@
 2. 打开[脚本安装地址](https://github.com/byJming/douban-movie-exporter/raw/main/douban-movie-exporter.user.js)。
 3. 确认安装或更新，并检查脚本版本为 `2.4.0`。
 
+## 可选：内嵌 Excel 库的版本
+
+如果 `cdn.sheetjs.com` 的依赖下载失败，可选择安装[内嵌版本](https://github.com/byJming/douban-movie-exporter/raw/main/douban-movie-exporter.bundled.user.js)。它将同版本 SheetJS 0.20.1 直接打包进用户脚本，不再通过 `@require` 获取库；JSON、Excel 和封面 ZIP 的导出逻辑沿用原版。脚本约 1 MB，比原版更大。
+
+两个版本有独立名称和 namespace；请只启用其中一个，避免重复按钮和同时抓取。内嵌版显示 `[Bundled]`。Chrome 中仍需为 Tampermonkey 开启“允许用户脚本”（详见[官方说明](https://www.tampermonkey.net/faq.php?locale=zh&q=Q209)）；内嵌依赖不会替代这一权限，也不代表可以离线抓取豆瓣页面或封面。
+
+维护者修改原脚本后，重新生成并验证内嵌版本（需要 Node.js 18+）：
+
+```sh
+node scripts/build-bundled.mjs
+node --check douban-movie-exporter.bundled.user.js
+node --test tests/bundled.test.mjs
+```
+
+生成器会校验库的 SHA-256，输出可复现；来源和校验值见 `vendor/sheetjs-0.20.1/SOURCE.json`。库按 Apache-2.0 许可分发，许可证保留在该目录；导出器代码仍为 MIT 许可。升级 SheetJS 时需核对来源、校验值和原脚本的 `@require`，再重新生成。
+
 ## 使用
 
 登录豆瓣电脑版后，进入个人主页或以下任一收藏页：
